@@ -5,7 +5,6 @@ const { NotFoundError, BadRequestError } = require("../expressError");
 const router = new express.Router();
 
 
-const app = require("../app");
 const db = require("../db");
 
 /** A simple GET request that returns a list of companies as JSON.
@@ -14,31 +13,40 @@ const db = require("../db");
 router.get("/", async function (req, res) {
   const results = await db.query(
     `SELECT code, name
-        FROM companies`
-        //TODO: Add order by
+        FROM companies
+        ORDER BY name`
   );
   return res.json({ companies: results.rows });
 });
 
 
 /**  Taking in a Company Code as URL parameter, it returns that company
- *  detail as JSON. Example: {company: {code, name, description}}
+ *  detail as JSON.
+ *  Example response: {company: {code, name, description, invoices: [id, ...]}}
  *  If company not found, a 404 error is returned. s
  */
 router.get("/:code", async function (req, res) {
   const code = req.params.code;
-  const results = await db.query(
+  const cResult = await db.query(
     `SELECT code, name, description
         FROM companies
         WHERE code = $1`, [code]);
 
-  const company = results.rows[0]
+  const company = cResult.rows[0];
+
+  const iResults = await db.query(
+    `SELECT id
+        FROM invoices
+        WHERE comp_code = $1`, [code]);
+  const invoices = iResults.rows;
+
+  company.invoices = invoices;
 
   if (!company) {
     throw new NotFoundError(`Not found ${code}`);
   };
 
-  return res.json({ company })
+  return res.json({ company });
 
 });
 
@@ -48,14 +56,11 @@ router.get("/:code", async function (req, res) {
  *  as JSON. Example response: {company: {code, name, description}}
  */
 router.post("/", async function (req, res) {
-  const { code, name, description } = req.body
-  // const company = req.body
-  //TODO: At least make sure req.body isn't undefined
+  const { code, name, description } = req.body;
 
-
-  // Object.values(company).forEach(field => field === ""
-  //   ? throw new BadRequestError("You cannot pass in empty fields")
-  //   : continue; );
+  if (req.body === undefined) {
+    throw new BadRequestError("No data provided in request")
+  }
 
   const result = await db.query(
     `INSERT INTO companies
@@ -66,7 +71,7 @@ router.post("/", async function (req, res) {
   );
   const resultCompany = result.rows[0];
   return res.status(201).json({ company: resultCompany });
-})
+});
 
 /** Given a company code in the URL and a name and description in the JSON body
  * example request body: {name, description},
@@ -77,7 +82,10 @@ router.post("/", async function (req, res) {
 
 router.put("/:code", async function (req, res) {
 
-  //TODO: If req.body is undefined, return BadRequestError
+  if (req.body === undefined) {
+    throw new BadRequestError("No data provided in request")
+  }
+
   const companyCode = req.params.code;
 
   const { name, description } = req.body;
@@ -88,7 +96,7 @@ router.put("/:code", async function (req, res) {
         description= $3
         WHERE code = $1
         RETURNING code, name, description`,
-        [companyCode, name, description],
+    [companyCode, name, description],
   );
   const company = result.rows[0];
 
@@ -96,29 +104,29 @@ router.put("/:code", async function (req, res) {
     throw new NotFoundError(`Not found ${companyCode}`);
   };
 
-  return res.json({company});
-})
+  return res.json({ company });
+});
 
 /** Given a company code in the URL, this function will delete the company
  * from the database. Upon successful deletion, it will return {status: "deleted"}.
  * If the company code is not found, it returns a NotFoundError 404 error.
 */
 
-router.delete("/:code", async function(req, res) {
+router.delete("/:code", async function (req, res) {
   const companyCode = req.params.code;
   const result = await db.query(
     `DELETE FROM companies
         WHERE code = $1
         RETURNING name`,
-        [companyCode],
+    [companyCode],
   );
 
   if (!result.rows[0]) {
     throw new NotFoundError(`Not found ${companyCode}`);
   };
 
-  return res.json({status: "deleted"})
+  return res.json({ status: "deleted" });
 
-})
+});
 
 module.exports = router;
