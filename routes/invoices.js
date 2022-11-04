@@ -15,7 +15,8 @@ router.get('/', async function (req, res) {
         FROM invoices
         ORDER BY id`
   );
-  return res.json({ invoices: results.rows });
+  const invoices = results.rows
+  return res.json({ invoices });
 });
 
 /** Taking an invoice ID at URL param, it returns that invoice detail as
@@ -27,16 +28,17 @@ router.get('/', async function (req, res) {
 router.get("/:id", async function (req, res) {
   const id = req.params.id;
   const iResult = await db.query(
-    `SELECT id, amt, paid, add_date, paid_date
+    `SELECT id, amt, paid, add_date, paid_date, comp_code
         FROM invoices
         WHERE id = $1`, [id]);
   const invoice = iResult.rows[0];
-
+//TODO: add 404
   const cResult = await db.query(
     `SELECT code, name, description
         FROM companies
-        WHERE code = invoice.comp_code`);
+        WHERE code = $1`, [invoice.comp_code]);
   const company = cResult.rows[0];
+  delete invoice.comp_code;
 
   invoice.company = company;
 
@@ -108,7 +110,7 @@ router.delete("/:id", async function (req, res) {
   const result = await db.query(
     `DELETE FROM invoices
         WHERE id = $1
-        RETURNING amt`,
+        RETURNING id`,
         [invoiceId],
   );
 
